@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "football-statistics"
+version = "0.1.0"
+description = ""
+authors = ["Guilherme Sa <seuemail@email.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+streamlit = "^1.10.0"
+pandas = "^2.2.3"
+requests = "^2.32.3"
+pydantic = "^2.11.1"
+matplotlib = "^3.10.1"
+seaborn = "^0.13.2"
+python-dotenv = "^1.1.0"
+sqlalchemy = "^2.0.40"
+psycopg2 = "^2.9.10"
+plotly = "^6.0.1"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+update-matches = "app.core.run_update_matches:main"

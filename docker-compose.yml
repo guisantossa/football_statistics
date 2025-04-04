@@ -1,0 +1,30 @@
+services:
+  # Serviço para o Spark
+  spark:
+    image: bitnami/spark:3.3.2
+    container_name: spark
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8080:8080"  # Porta do Spark UI
+    networks:
+      - football_network
+    volumes:
+      - ./spark:/opt/spark
+
+  # Serviço para o Streamlit
+  streamlit:
+    build:
+      context: .
+    container_name: streamlit
+    ports:
+      - "8501:8501"  # Porta do Streamlit
+    networks:
+      - football_network
+    volumes:
+      - .:/src/app
+    command: ["poetry", "run", "streamlit", "run", "frontend/app.py"]
+
+networks:
+  football_network:
+    driver: bridge

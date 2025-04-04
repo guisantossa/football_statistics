@@ -1,0 +1,25 @@
+# Ignore files and directories that are not needed inside the container
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore Poetry virtualenv and config
+.poetry/
+*.lock
+
+# Ignore local environment files
+.env
+.venv/
+
+# Ignore IDE and editor directories
+.vscode/
+.idea/
+
+# Ignore Docker-related files
+.docker/
+docker-compose.override.yml
+
+# Ignore any log files
+*.log
