@@ -1,6 +1,9 @@
 from typing import Type, TypeVar, Generic, List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from .db import Base, Player, PlayerStatistic, Team, TeamPlayer, Match, League, Country, Season, SeasonTeam
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))  # Volta até app
+from database.db import Base, Player, PlayerStatistic, Team,  Match, League, Country, Season, ModelPredictions, ModelPredictionReviews
 
 
 T = TypeVar('T', bound=Base)
@@ -74,14 +77,6 @@ class CRUDPlayerStatistic(CRUDBase[PlayerStatistic]):
 class CRUDTeam(CRUDBase[Team]):
     pass
 
-class CRUDTeamPlayer(CRUDBase[TeamPlayer]):
-    def get_by_team_and_player(self, db: Session, team_id: int, player_id: int) -> Optional[TeamPlayer]:
-        return (
-            db.query(self.model)
-            .filter(self.model.team_id == team_id, self.model.player_id == player_id)
-            .first()
-        )
-
 class CRUDMatch(CRUDBase[Match]):
     def get_matches_by_team(self, db: Session, team_id: int, skip: int = 0, limit: int = 100) -> List[Match]:
         return (
@@ -115,27 +110,25 @@ class CRUDSeason(CRUDBase[Season]):
             .first()
         )
 
-class CRUDSeasonTeam(CRUDBase[SeasonTeam]):
-    def get_teams_by_season(self, db: Session, season_id: int, skip: int = 0, limit: int = 100) -> List[Team]:
-        return (
-            db.query(Team)
-            .join(self.model)
-            .filter(self.model.season_id == season_id)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
-    
-    def get_seasons_by_team(self, db: Session, team_id: int, skip: int = 0, limit: int = 100) -> List[Season]:
-        return (
-            db.query(Season)
-            .join(self.model)
-            .filter(self.model.team_id == team_id)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+class CRUDModelPrediction(CRUDBase[ModelPredictions]):
+    def get_by_model_type(self, db: Session, model_type: str) -> Optional[ModelPredictions]:
+        """Retorna um registro baseado no tipo de modelo"""
+        return db.query(self.model).filter(self.model.model_type == model_type).first()
 
+    def get_predictions_by_model(self, db: Session, model_id: int) -> List[ModelPredictions]:
+        """Retorna todas as previsões associadas a um modelo específico"""
+        return db.query(self.model).filter(self.model.model_id == model_id).all()
+    
+class CRUDModelPredictionReview(CRUDBase[ModelPredictionReviews]):
+    def get_reviews_by_prediction(self, db: Session, prediction_id: int) -> List[ModelPredictionReviews]:
+        """Retorna todas as revisões associadas a uma previsão específica"""
+        return db.query(self.model).filter(self.model.prediction_id == prediction_id).all()
+
+    def get_review_by_user_and_prediction(self, db: Session, user_id: int, prediction_id: int) -> Optional[ModelPredictionReviews]:
+        """Retorna uma revisão específica baseada no usuário e na previsão"""
+        return db.query(self.model).filter(self.model.user_id == user_id, self.model.prediction_id == prediction_id).first()
+    
+    
 # Instâncias das classes CRUD para uso na aplicação
 #player = CRUDPlayer(Player)
 #player_statistic = CRUDPlayerStatistic(PlayerStatistic)

@@ -1,7 +1,7 @@
 services:
   # Serviço para o Spark
   spark:
-    image: bitnami/spark:3.3.2
+    image: bitnami/spark:3.5.0
     container_name: spark
     environment:
       - SPARK_MODE=master
@@ -24,6 +24,9 @@ services:
     volumes:
       - .:/src/app
     command: ["poetry", "run", "streamlit", "run", "frontend/app.py"]
+    environment:
+      - STREAMLIT_SERVER_ENABLE_WATCHDOG=true
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
 
 networks:
   football_network:

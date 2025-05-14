@@ -1,0 +1,46 @@
+name: CI Pipeline - Análise de Dados de Futebol
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: python:3.9-slim  # Ou sua imagem Docker personalizada
+
+    steps:
+    - name: Checkout do Código
+      uses: actions/checkout@v4
+
+    - name: Instalar Dependências
+      run: |
+        pip install pandas pytest pyspark
+        # Adicione outras libs do seu projeto
+
+    - name: Rodar Testes
+      run: |
+        pytest tests/  # Se tiver testes
+        python src/data_validation.py  # Se tiver validações
+
+  build-docker:
+    needs: test  # Só roda se os testes passarem
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login no Docker Hub (opcional)
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build e Push da Imagem Docker
+        uses: docker/build-push-action@v4
+        with:
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: seu-user/projeto-futebol:latest

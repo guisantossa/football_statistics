@@ -1,0 +1,419 @@
+fouls:
+  agg_columns:
+    - [home_team_goals, home_team_goals]
+    - [away_team_goals, away_team_goals]
+    - [home_team_possession, home_team_possession]
+    - [away_team_possession, away_team_possession]
+    - [home_team_shots, home_team_shots]
+    - [away_team_shots, away_team_shots]
+    - [home_team_shots_on_target, home_team_shots_on_target]
+    - [away_team_shots_on_target, away_team_shots_on_target]
+    - [home_team_fouls, home_team_fouls]
+    - [away_team_fouls, away_team_fouls]
+    - [home_team_corners, home_team_corners]
+    - [away_team_corners, away_team_corners]
+    - [home_team_yellow_cards, home_team_yellow_cards]
+    - [away_team_yellow_cards, away_team_yellow_cards]
+    - [home_team_red_cards, home_team_red_cards]
+    - [away_team_red_cards, away_team_red_cards]
+    - [home_team_goals_firsthalf, home_team_goals_firsthalf]
+    - [away_team_goals_firsthalf, away_team_goals_firsthalf]
+    - [home_team_points, home_team_points]
+    - [away_team_points, away_team_points]
+    - [home_team_goal_diff, home_team_goal_diff]
+    - [away_team_goal_diff, away_team_goal_diff]
+    - [home_team_goals_pro, home_team_goals_pro]
+    - [home_team_goals_against, home_team_goals_against]
+    - [away_team_goals_pro, away_team_goals_pro]
+    - [away_team_goals_against, away_team_goals_against]
+    - [home_team_yellow_cards_total, home_team_yellow_cards_total]
+    - [home_team_red_cards_total, home_team_red_cards_total]
+    - [away_team_yellow_cards_total, away_team_yellow_cards_total]
+    - [away_team_red_cards_total, away_team_red_cards_total]
+    - [home_team_rank, home_team_rank]
+    - [away_team_rank, away_team_rank]
+  agg_func: avg
+  query_columns:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+  feature_cols:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+    - total_fouls
+  target: total_fouls
+  target_expr: home_team_fouls + away_team_fouls
+
+corners:
+  agg_columns:
+    - [home_team_goals, home_team_goals]
+    - [away_team_goals, away_team_goals]
+    - [home_team_possession, home_team_possession]
+    - [away_team_possession, away_team_possession]
+    - [home_team_shots, home_team_shots]
+    - [away_team_shots, away_team_shots]
+    - [home_team_shots_on_target, home_team_shots_on_target]
+    - [away_team_shots_on_target, away_team_shots_on_target]
+    - [home_team_fouls, home_team_fouls]
+    - [away_team_fouls, away_team_fouls]
+    - [home_team_corners, home_team_corners]
+    - [away_team_corners, away_team_corners]
+    - [home_team_yellow_cards, home_team_yellow_cards]
+    - [away_team_yellow_cards, away_team_yellow_cards]
+    - [home_team_red_cards, home_team_red_cards]
+    - [away_team_red_cards, away_team_red_cards]
+    - [home_team_goals_firsthalf, home_team_goals_firsthalf]
+    - [away_team_goals_firsthalf, away_team_goals_firsthalf]
+    - [home_team_points, home_team_points]
+    - [away_team_points, away_team_points]
+    - [home_team_goal_diff, home_team_goal_diff]
+    - [away_team_goal_diff, away_team_goal_diff]
+    - [home_team_goals_pro, home_team_goals_pro]
+    - [home_team_goals_against, home_team_goals_against]
+    - [away_team_goals_pro, away_team_goals_pro]
+    - [away_team_goals_against, away_team_goals_against]
+    - [home_team_yellow_cards_total, home_team_yellow_cards_total]
+    - [home_team_red_cards_total, home_team_red_cards_total]
+    - [away_team_yellow_cards_total, away_team_yellow_cards_total]
+    - [away_team_red_cards_total, away_team_red_cards_total]
+    - [home_team_rank, home_team_rank]
+    - [away_team_rank, away_team_rank]
+  agg_func: avg
+  query_columns:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+  feature_cols:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+    - total_corners
+  target: total_corners
+  target_expr: home_team_corners + away_team_corners
+
+yellow_cards:
+  agg_columns:
+    - [home_team_goals, home_team_goals]
+    - [away_team_goals, away_team_goals]
+    - [home_team_possession, home_team_possession]
+    - [away_team_possession, away_team_possession]
+    - [home_team_shots, home_team_shots]
+    - [away_team_shots, away_team_shots]
+    - [home_team_shots_on_target, home_team_shots_on_target]
+    - [away_team_shots_on_target, away_team_shots_on_target]
+    - [home_team_fouls, home_team_fouls]
+    - [away_team_fouls, away_team_fouls]
+    - [home_team_corners, home_team_corners]
+    - [away_team_corners, away_team_corners]
+    - [home_team_yellow_cards, home_team_yellow_cards]
+    - [away_team_yellow_cards, away_team_yellow_cards]
+    - [home_team_red_cards, home_team_red_cards]
+    - [away_team_red_cards, away_team_red_cards]
+    - [home_team_goals_firsthalf, home_team_goals_firsthalf]
+    - [away_team_goals_firsthalf, away_team_goals_firsthalf]
+    - [home_team_points, home_team_points]
+    - [away_team_points, away_team_points]
+    - [home_team_goal_diff, home_team_goal_diff]
+    - [away_team_goal_diff, away_team_goal_diff]
+    - [home_team_goals_pro, home_team_goals_pro]
+    - [home_team_goals_against, home_team_goals_against]
+    - [away_team_goals_pro, away_team_goals_pro]
+    - [away_team_goals_against, away_team_goals_against]
+    - [home_team_yellow_cards_total, home_team_yellow_cards_total]
+    - [home_team_red_cards_total, home_team_red_cards_total]
+    - [away_team_yellow_cards_total, away_team_yellow_cards_total]
+    - [away_team_red_cards_total, away_team_red_cards_total]
+    - [home_team_rank, home_team_rank]
+    - [away_team_rank, away_team_rank]
+  agg_func: avg
+  query_columns:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+  feature_cols:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+    - total_yellow_cards
+  target: total_yellow_cards
+  target_expr: home_team_yellow_cards + away_team_yellow_cards
+
+goals:
+  agg_columns:
+    - [home_team_goals, home_team_goals]
+    - [away_team_goals, away_team_goals]
+    - [home_team_possession, home_team_possession]
+    - [away_team_possession, away_team_possession]
+    - [home_team_shots, home_team_shots]
+    - [away_team_shots, away_team_shots]
+    - [home_team_shots_on_target, home_team_shots_on_target]
+    - [away_team_shots_on_target, away_team_shots_on_target]
+    - [home_team_fouls, home_team_fouls]
+    - [away_team_fouls, away_team_fouls]
+    - [home_team_corners, home_team_corners]
+    - [away_team_corners, away_team_corners]
+    - [home_team_yellow_cards, home_team_yellow_cards]
+    - [away_team_yellow_cards, away_team_yellow_cards]
+    - [home_team_red_cards, home_team_red_cards]
+    - [away_team_red_cards, away_team_red_cards]
+    - [home_team_goals_firsthalf, home_team_goals_firsthalf]
+    - [away_team_goals_firsthalf, away_team_goals_firsthalf]
+    - [home_team_points, home_team_points]
+    - [away_team_points, away_team_points]
+    - [home_team_goal_diff, home_team_goal_diff]
+    - [away_team_goal_diff, away_team_goal_diff]
+    - [home_team_goals_pro, home_team_goals_pro]
+    - [home_team_goals_against, home_team_goals_against]
+    - [away_team_goals_pro, away_team_goals_pro]
+    - [away_team_goals_against, away_team_goals_against]
+    - [home_team_yellow_cards_total, home_team_yellow_cards_total]
+    - [home_team_red_cards_total, home_team_red_cards_total]
+    - [away_team_yellow_cards_total, away_team_yellow_cards_total]
+    - [away_team_red_cards_total, away_team_red_cards_total]
+    - [home_team_rank, home_team_rank]
+    - [away_team_rank, away_team_rank]
+  agg_func: avg
+  query_columns:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+  feature_cols:
+    - home_team_goals
+    - away_team_goals
+    - home_team_possession
+    - away_team_possession
+    - home_team_shots
+    - away_team_shots
+    - home_team_shots_on_target
+    - away_team_shots_on_target
+    - home_team_fouls
+    - away_team_fouls
+    - home_team_corners
+    - away_team_corners
+    - home_team_yellow_cards
+    - away_team_yellow_cards
+    - home_team_red_cards
+    - away_team_red_cards
+    - home_team_goals_firsthalf
+    - away_team_goals_firsthalf
+    - home_team_points
+    - away_team_points
+    - home_team_goal_diff
+    - away_team_goal_diff
+    - home_team_goals_pro
+    - home_team_goals_against
+    - away_team_goals_pro
+    - away_team_goals_against
+    - home_team_yellow_cards_total
+    - home_team_red_cards_total
+    - away_team_yellow_cards_total
+    - away_team_red_cards_total
+    - home_team_rank
+    - away_team_rank
+    - total_goals
+  target: total_goals
+  target_expr: home_team_goals + away_team_goals

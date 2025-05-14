@@ -1,22 +1,43 @@
 [tool.poetry]
 name = "football-statistics"
 version = "0.1.0"
-description = ""
+description = "API + Dashboard de estatísticas preditivas para futebol"
 authors = ["Guilherme Sa <seuemail@email.com>"]
 readme = "README.md"
+license = "MIT"
 
+# Todas as dependências (API + Frontend no mesmo servidor)
 [tool.poetry.dependencies]
 python = "^3.10"
-streamlit = "^1.10.0"
-pandas = "^2.2.3"
+# Core
+pandas = "1.5.3"
 requests = "^2.32.3"
 pydantic = "^2.11.1"
-matplotlib = "^3.10.1"
-seaborn = "^0.13.2"
-python-dotenv = "^1.1.0"
 sqlalchemy = "^2.0.40"
 psycopg2 = "^2.9.10"
+python-dotenv = "^1.1.0"
+pyspark = "^3.5.0"
+# Visualização (Streamlit)
+streamlit = "^1.44.1"
 plotly = "^6.0.1"
+matplotlib = "^3.10.1"
+seaborn = "^0.13.2"
+
+# Dependências de desenvolvimento (opcional)
+streamlit-searchbox = "^0.1.22"
+streamlit-aggrid = "^1.1.2"
+streamlit-extras = "0.2.5"
+pygwalker = "^0.4.9.15"
+streamlit-elements = "^0.1.0"
+cloudpickle = "^3.1.1"
+scipy = "^1.15.2"
+streamlit-modal = "^0.1.2"
+tqdm = "^4.67.1"
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1.1"
+black = "^24.4.2"
+mypy = "^1.9.0"
+jupyter = "^1.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -24,3 +45,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 update-matches = "app.core.run_update_matches:main"
+start-dashboard = "app.frontend.app:main"  # Script para iniciar o Streamlit

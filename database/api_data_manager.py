@@ -1,113 +1,196 @@
 import requests
-from .db import get_db, League, Team, Match, Player, Season, Country, SeasonTeam
-from . import crud
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))  # Volta até app
+from database.db import get_db, League, Team, Match, Player, Season, Country, Season, Bookmaker, BetType, Bet
+from sqlalchemy import or_, and_
+from database.crud import CRUDBase, CRUDMatch
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+import pandas as pd
 import traceback
 import time
+import logging
 
 
 # Carregar variáveis do .env
 load_dotenv()
 
-RAPID_API_KEY = os.getenv('RAPID_API_KEY2')
+RAPID_API_KEY = os.getenv('RAPID_API_KEY')
 
 class APIDataManager:
 
     def __init__(self):
         self.session = get_db()
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
     #busca de Dados por endpoints
     # url = endpoint desejado 
-    def fetch_data(self, url):
+    def fetch_data(self, url, max_retries=3):
         headers = {
             "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
             "X-RapidAPI-Key": RAPID_API_KEY
         }
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            json_data = response.json()
-            return json_data
-        except requests.exceptions.HTTPError as http_err:
-            print(f'HTTP error: {http_err}')
-        except Exception as err:
-            print(f'Error: {err}')
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                if not data or 'response' not in data:
+                    print(f"Nenhum dado válido retornado para {url}")
+                    return None
+                return data
+            except requests.exceptions.HTTPError as http_err:
+                if response.status_code == 429:  # Too Many Requests
+                    wait_time = int(response.headers.get('Retry-After', 30))
+                    print(f"Rate limited. Waiting {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                print(f'HTTP error {response.status_code}: {http_err}')
+            except Exception as err:
+                print(f'Attempt {attempt + 1} failed: {err}')
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
         return None
 
-    def save_country(self, country_data):
+    def save_country(self, country_data, countries_selected = None):
         for country in country_data:
+            if countries_selected and country['name'] not in countries_selected:
+                print(f"Country {country['name']} not in selected countries, skipping...")
+                continue
             print(f"Attempting to save country with name: {country['name']}")  # Debugging
             c = self.session.query(Country).filter(Country.code == country['code']).first()
             if country['code'] == None:
                 country['code'] = 'N/A'
             if not c:
                 print(f"Country {country['name']} not found, creating...")
-                country = Country(
+                country_add = Country(
                     name=country['name'],
                     code=country['code']
                 )
-                self.session.add(country)
+                self.session.add(country_add)
                 self.session.commit()
-            teams = self.fetch_data(f"https://api-football-v1.p.rapidapi.com/v3/teams?country={country['name']}")
-            self.save_teams(teams['response'])
-        return country
-      
+                teams = self.fetch_data(f"https://api-football-v1.p.rapidapi.com/v3/teams?country={country['name']}")
+                self.save_teams(teams['response'])
+ 
     def save_league(self, competition_data):
+        leagues_id = []
+        leagues_ignored = ['236']
+        
         for competition in competition_data:
+            if competition['league']['id'] in leagues_ignored:
+                print(f"Competition {competition['league']['name']} is ignored, skipping...")
+                continue
+            if competition['league']['type'] != 'League':
+                print(f"Competition {competition['league']['name']} is not a league, skipping...")
+                continue
+
             print(f"Attempting to save competition with ID: {competition['league']['name']}")
             first = self.session.query(League).filter(League.id == competition['league']['id']).first()
-            if not first:
-                print(f"Competição {competition['league']['name']} não encontrada, criando...")
-                if competition['country']['code'] == None:
-                    competition['country']['code'] = 'N/A'
-                country_id = self.session.query(Country).filter(Country.code == competition['country']['code']).first()
-                league = League(
-                    id=competition['league']['id'],
-                    name=competition['league']['name'],
-                    type=competition['league']['type'],
-                    logo=competition['league']['logo'],
-                    country_id=country_id.id
-                )
-                self.session.add(league)
-                self.session.commit()
-                self.save_season(league.id, competition)
-        return competition
-        
-    def save_season(self, competition_id, competition):
-        for season in competition['seasons']:
-            print(f"Attempting to save season with ID: {season['year']}")
-            #first = self.session.query(LeagueSeason).filter(LeagueSeason.league_id == season['league']['id']).first()
-            season = Season(
-                league_id=competition_id,
-                year=season['year'],
-                current=season['current']
-            )
-            self.session.add(season)
-            self.session.commit()
+            if(competition['seasons'][0]['coverage']['fixtures']["statistics_fixtures"] == False):
+                print('Competição não habilitada')
+                continue
+            else:
+                if not first:
+                    print(f"Competição {competition['league']['name']} não encontrada, criando...")
+                    if competition['country']['code'] == None:
+                        competition['country']['code'] = 'N/A'
+                    country_id = self.session.query(Country).filter(Country.code == competition['country']['code']).first()
+                    if not country_id:
+                        print(f"Country {competition['country']['name']} not found (não habilitado), creating...")
+                        continue
 
+                    league = League(
+                        id=competition['league']['id'],
+                        name=competition['league']['name'],
+                        type=competition['league']['type'],
+                        logo=competition['league']['logo'],
+                        country_id=country_id.id
+                    )
+                    self.session.add(league)
+                    self.session.commit()
+                    
+                else:
+                    print(f"Competição {competition['league']['name']} já existe")
+                
+                leagues_id.append(competition['league']['id'])
+                    
+        return leagues_id
+
+    def get_leagues(self, country_id = None):
+        leagues = self.session.query(League).filter(League.type == 'League').all()
+        return leagues
     
-        headers = {
-            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
-            "X-RapidAPI-Key": RAPID_API_KEY
-        }
-        try:
-            response = requests.get("https://api-football-v1.p.rapidapi.com/v3/teams", headers=headers)
-            response.raise_for_status()
-            json_data = response.json()
-            return json_data
-        except requests.exceptions.HTTPError as http_err:
-            print(f'HTTP error: {http_err}')
-        except Exception as err:
-            print(f'Error: {err}')
-        return None
+    def get_countries(self):
+        countries = self.session.query(Country).all()
+        return countries
     
+    def save_season(self, seasons_data, countries_selected = None):
+        for season_data in seasons_data:
+            if countries_selected and season_data['country']['name'] not in countries_selected:
+                print(f"Country {season_data['country']['name']} not in selected countries, skipping...")
+                continue
+            try:
+                # Verifica se a temporada já existe
+                existing_season = self.session.query(Season).filter(
+                    Season.league_id == season_data['league']['id'],
+                    Season.year == str(season_data['seasons'][0]['year'])
+                ).first()
+                
+                if existing_season:
+                    print(f"Season {season_data['seasons'][0]['year']} from {season_data['league']['name']} from country {season_data['country']['name']} already exists")
+                    continue
+                if(season_data['seasons'][0]['coverage']['fixtures']["statistics_fixtures"] == False):
+                    print('Temporada não habilitada')
+                    continue
+                else:
+                    # Verifica se a temporada já existe
+                    existing_league = self.session.query(League).filter(
+                        League.id == season_data['league']['id']
+                        ).first()
+                    if not existing_league:
+                        print(f"League {season_data['league']['name']} não encontrada. Cadastrando...")
+                        self.save_league([season_data])
+                    print(f"Saving season {season_data['seasons'][0]['year']} from {season_data['league']['name']} from country {season_data['country']['name']}")
+                    # Cria nova temporada
+                    new_season = Season(
+                        league_id=season_data['league']['id'],
+                        year=season_data['seasons'][0]['year'],
+                        current=season_data['seasons'][0]['current'],
+                        type=season_data['league']['type'],
+                        logo='in Leagues',
+                        start_date=season_data['seasons'][0]['start'],
+                        end_date=season_data['seasons'][0]['end']
+                    )
+                    
+                    self.session.add(new_season)
+                    self.session.commit()
+                
+            except KeyError as e:
+                print(f"Error: Missing key in season data - {e}")
+                self.session.rollback()
+                continue
+                
+            except ValueError as e:
+                print(f"Error: Invalid date values - {e}")
+                self.session.rollback()
+                continue
+                
+            except Exception as e:
+                print(f"Unexpected error saving season: {e}")
+                self.session.rollback()
+                continue
+            
     def save_teams(self, team_data):
         
         print(f"Found {len(team_data)} teams")
-        result = self.session.execute('SELECT 1').fetchall()
-        print(result)
         for team in team_data:
             first = self.session.query(Team).filter(Team.id == team['team']['id']).first()
             if not first:
@@ -115,8 +198,7 @@ class APIDataManager:
                 team = Team(id=team['team']['id'], name=team['team']['name'], short_name=team['team']['code'], city=team['team']['country'], img_url=team['team']['logo'])
                 self.session.add(team)
                 self.session.commit()
-        time.sleep(10)
-        return team
+ 
     
     def save_match(self, match_data, competition_id, home_team_id, away_team_id):
         existing_match = self.session.query(Match).filter(Match.id == match_data['id']).first()
@@ -170,10 +252,9 @@ class APIDataManager:
         self.session.add(player_stat)
         self.session.commit()
 
-    def save_matches(self, matches_data):
-        print(f"Found {len(matches_data)} matches")
+    def save_matches(self, matches_data, league_id):
+        print(f"Found {len(matches_data)} matches - League {league_id}")
         for match in matches_data:
-            print(f"Attempting to save match with ID: {match['fixture']['id']}")
             league = self.session.query(League).filter(
                 League.id == match['league']['id']
             ).first()
@@ -206,55 +287,321 @@ class APIDataManager:
                     away_team_id=away_team.id,
                     home_team_goals=match['goals']['home'],
                     away_team_goals=match['goals']['away'],
+                    home_team_goals_firsthalf=match['score']['halftime']['home'],
+                    away_team_goals_firsthalf=match['score']['halftime']['away'],
                     status=1 if match['fixture']['status']["long"] == "Match Finished" else 2 if match['fixture']['status']["long"] == "In Progress" else 0,
                     data=match['fixture']['date'],
-                    matchday=match['league']['round'][-2:],
+                    matchday=self.get_match_day(match['league']['round']),
                     league_id=league.id  # Referência para o LeagueSeason
                 )
                 
                 self.session.add(new_match)
                 self.session.commit()
+            
+                
+    def get_match_day(self, matchday):
+        if 'Quarter-finals' in matchday:
+            return 'Quarter-finals'
+        elif  'Semi-finals' in matchday:
+            return 'Semi-finals'
+        elif 'Final' in matchday:
+            return 'Final'
+        elif '3rd Place Final' in matchday: 
+            return '3rd Place Final'
+        elif 'Relegation Round' in matchday:
+            return 'Relegation Round'
+        elif 'Preliminary Round' in matchday:
+            return 'Preliminary Round'
+        else:
+            return matchday
+    
     
     def save_statistics(self, statistics, match_id):
         print(f"Atualizando as estatisticas do jogo: {match_id}")
         existing_match = self.session.query(Match).filter_by(id=match_id).first()
+        
+        def get_stat_value(stat_list, team_idx, stat_idx, default='0', is_percentage=False):
+            try:
+                value = stat_list[team_idx]['statistics'][stat_idx]['value']
+                if value is None:
+                    return default
+                if is_percentage and value is not None:
+                    return value.replace('%', '')
+                return value
+            except (IndexError, KeyError, TypeError):
+                return default
+                
         if not existing_match:
             print(f"Partida {match_id} não encontrada")
             return
         else:
-            existing_match.home_team_possession=statistics[0]['statistics'][9]['value'].replace('%', '')
-            existing_match.away_team_possession=statistics[1]['statistics'][9]['value'].replace('%', '')
-            existing_match.home_team_shots=statistics[0]['statistics'][2]['value']
-            existing_match.away_team_shots=statistics[1]['statistics'][2]['value']
-            existing_match.home_team_shots_on_target=statistics[0]['statistics'][0]['value']
-            existing_match.away_team_shots_on_target=statistics[1]['statistics'][0]['value']
-            existing_match.home_team_fouls=statistics[0]['statistics'][6]['value']
-            existing_match.away_team_fouls=statistics[1]['statistics'][6]['value']
-            existing_match.home_team_corners=statistics[0]['statistics'][7]['value']
-            existing_match.away_team_corners=statistics[1]['statistics'][7]['value']
-            existing_match.home_team_yellow_cards=statistics[0]['statistics'][10]['value']
-            existing_match.away_team_yellow_cards=statistics[1]['statistics'][10]['value']
-            existing_match.home_team_red_cards=statistics[0]['statistics'][11]['value']
-            existing_match.away_team_red_cards=statistics[1]['statistics'][11]['value']
+            existing_match.home_team_possession=get_stat_value(statistics, 0, 9, is_percentage=True)
+            existing_match.away_team_possession=get_stat_value(statistics, 1, 9, is_percentage=True)
+            existing_match.home_team_shots = get_stat_value(statistics, 0, 2)
+            existing_match.away_team_shots = get_stat_value(statistics, 1, 2)
+            existing_match.home_team_shots_on_target = get_stat_value(statistics, 0, 0)
+            existing_match.away_team_shots_on_target = get_stat_value(statistics, 1, 0)
+            existing_match.home_team_fouls = get_stat_value(statistics, 0, 6)
+            existing_match.away_team_fouls = get_stat_value(statistics, 1, 6)
+            existing_match.home_team_corners = get_stat_value(statistics, 0, 7)
+            existing_match.away_team_corners = get_stat_value(statistics, 1, 7)
+            existing_match.home_team_yellow_cards = get_stat_value(statistics, 0, 10)
+            existing_match.away_team_yellow_cards = get_stat_value(statistics, 1, 10)
+            existing_match.home_team_red_cards = get_stat_value(statistics, 0, 11)
+            existing_match.away_team_red_cards = get_stat_value(statistics, 1, 11)
             
            
             self.session.commit()
+            
 
-    #uma função simplesmente para pegar os ids das partidas e adicionar as estatisticas por parte, para não estourar o limite diário de consultas
+    def get_matches_to_update(self, league_id:int = None):
+        '''
+        Procura as partidas a serem atualizadas
+        '''
+        if league_id:
+            league = self.session.query(League).filter(
+                League.id == league_id
+            ).first()
+            if not league:
+                print(f"Nenhuma League encontrada para league_id={league_id}")
+                return []
+            matches = self.session.query(Match).filter(
+                    (Match.status == '0'), Match.data < datetime.now(), Match.league_id == league_id)
+        else:
+            matches = self.session.query(Match).filter(Match.status == '0', Match.data < datetime.now())
+        
+        # Extrai os IDs e converte para string
+        ids = [str(match.id) for match in matches]
+        print(f"{len(ids)} partidas encontradas")
+        # Junta os IDs com "-"
+        ids = "-".join(ids)
+        return ids
+    
+    def repair_matches_to_update(self, league_id:int = None):
+        '''
+        Procura as partidas a serem atualizadas
+        '''
+        if league_id:
+            league = self.session.query(League).filter(
+                League.id == league_id
+            ).first()
+            if not league:
+                print(f"Nenhuma League encontrada para league_id={league_id}")
+                return []
+            matches = self.session.query(Match).filter(
+                    Match.status == '1', Match.data < datetime.now(), Match.league_id == league_id, Match.home_team_possession.is_(None) )
+        else:
+            matches = self.session.query(Match).filter(Match.status == '0', Match.data < datetime.now())
+        
+        # Extrai os IDs e converte para string
+        ids = [str(match.id) for match in matches]
+        print(f"{len(ids)} partidas encontradas")
+        # Junta os IDs com "-"
+        ids = "-".join(ids)
+        return ids
+
+    def save_bet_types(self, bet_types_data):
+        for bet_type in bet_types_data:
+            try:
+                # Verifica se a temporada já existe
+                existing_bet_types = self.session.query(BetType).filter(
+                    BetType.id == bet_type['id']
+                ).first()
+                
+                if existing_bet_types:
+                    print(f"Bet Type {existing_bet_types['name']} already exists")
+                    continue
+
+                print(f"Saving Bet Type {bet_type['name']} ")
+                
+                # Cria nova temporada
+                new_bet_type = BetType(
+                    id=bet_type['id'],
+                    name=bet_type['name']
+                )
+                
+                self.session.add(new_bet_type)
+                self.session.commit()
+                
+            except KeyError as e:
+                print(f"Error: Missing key in bet type data - {e}")
+                self.session.rollback()
+                continue
+                
+            except ValueError as e:
+                print(f"Error: Invalid date values - {e}")
+                self.session.rollback()
+                continue
+                
+            except Exception as e:
+                print(f"Unexpected error saving bet type: {e}")
+                self.session.rollback()
+                continue
+    
+    def save_bookmakers(self, bookmakers_data):
+        for bookmaker in bookmakers_data:
+            try:
+                # Verifica se a temporada já existe
+                existing_bookmaker = self.session.query(Bookmaker).filter(
+                    Bookmaker.id == bookmaker['id']
+                ).first()
+                
+                if existing_bookmaker:
+                    print(f"Bookmaker {existing_bookmaker['name']} already exists")
+                    continue
+
+                print(f"Saving Bookmaker {bookmaker['name']} ")
+                
+                # Cria nova temporada
+                new_bookmaker = Bookmaker(
+                    id=bookmaker['id'],
+                    name=bookmaker['name']
+                    
+                )
+                
+                self.session.add(new_bookmaker)
+                self.session.commit()
+                
+            except KeyError as e:
+                print(f"Error: Missing key in bookmaker data - {e}")
+                self.session.rollback()
+                continue
+                
+            except ValueError as e:
+                print(f"Error: Invalid date values - {e}")
+                self.session.rollback()
+                continue
+                
+            except Exception as e:
+                print(f"Unexpected error saving bookmaker: {e}")
+                self.session.rollback()
+                continue
+    
+    def save_bets(self, bets_data):
+        for bets in bets_data:
+            for bets_bookmakers in bets['bookmakers']:
+                for bet_type in bets_bookmakers['bets']:
+                    for bet in bet_type['values']:
+                        try:
+                            # Verifica se a temporada já existe
+                            bet_existing = self.session.query(Bet).filter(
+                                Bet.match_id == bets['fixture']['id'],
+                                Bet.bet_type_id == bet_type['id'],
+                                Bet.bookmaker_id == bets_bookmakers['id'],
+                                Bet.bet_value == str(bet['value'])
+                            ).first()
+                            
+                            if bet_existing:
+                                print(f"Bet já existe {bet['value']} already exists")
+                                continue
+
+                            print(f"Saving Bet para a partida {bets['fixture']['id']} {bet_type['id']} valor {bet['value']} ")
+                            
+                            # Cria nova temporada
+                            new_bet = Bet(
+                                match_id=bets['fixture']['id'],
+                                bet_type_id=bet_type['id'],
+                                bookmaker_id=bets_bookmakers['id'],
+                                bet_value=bet['value'],
+                                odd=bet['odd']
+                            )
+                            
+                            self.session.add(new_bet)
+                            self.session.commit()
+                            
+                        except KeyError as e:
+                            print(f"Error: Missing key in bet data - {e}")
+                            self.session.rollback()
+                            continue
+                            
+                        except ValueError as e:
+                            print(f"Error: Invalid date values - {e}")
+                            self.session.rollback()
+                            continue
+                            
+                        except Exception as e:
+                            print(f"Unexpected error saving bet: {e}")
+                            self.session.rollback()
+                            continue
+    
+    def save_bets_prediction(self, bets_data):
+        '''
+        Salva as Odds das previsões de apostas 
+        '''
+        bet_types_insert = [5, 45, 80, 6, 16, 17]
+        for bets in bets_data:
+            #verifica se tem a fixture
+            fixture = self.session.query(Match).filter(
+                Match.id == bets['fixture']['id']
+            ).first()
+
+            if not fixture:
+                #print(f"Fixture {bets['fixture']['id']} não encontrada")
+                continue
+            for bets_bookmakers in bets['bookmakers']:
+                if bets_bookmakers['name'] != 'Betano':
+                    print(f"Bookmaker {bets_bookmakers['name']} não é Betano, pulando...")
+                    continue
+                for bet_type in bets_bookmakers['bets']:
+                    for bet in bet_type['values']:
+                        if bet_type['id'] not in bet_types_insert:
+                            print(f"Bet Type {bet_type['id']} não é uma aposta com previsão, pulando... {bets['fixture']['id']}")
+                            continue
+                        try:
+                            # Verifica se a bet já existe
+                            bet_existing = self.session.query(Bet).filter(
+                                Bet.match_id == bets['fixture']['id'],
+                                Bet.bet_type_id == bet_type['id'],
+                                Bet.bookmaker_id == bets_bookmakers['id'],
+                                Bet.bet_value == str(bet['value'])
+                            ).first()
+                            
+                            if bet_existing:
+                                print(f"Bet já existe {bet['value']} already exists")
+                                continue
+                            print(f"Saving Bet para a partida {bets['fixture']['id']} {bet_type['id']} valor {bet['value']} ")
+                            
+                            # Cria nova temporada
+                            new_bet = Bet(
+                                match_id=bets['fixture']['id'],
+                                bet_type_id=bet_type['id'],
+                                bookmaker_id=bets_bookmakers['id'],
+                                bet_value=bet['value'],
+                                odd=bet['odd']
+                            )
+                            
+                            self.session.add(new_bet)
+                            self.session.commit()
+                            
+                        except KeyError as e:
+                            print(f"Error: Missing key in bet data - {e}")
+                            self.session.rollback()
+                            continue
+                            
+                        except ValueError as e:
+                            print(f"Error: Invalid date values - {e}")
+                            self.session.rollback()
+                            continue
+                            
+                        except Exception as e:
+                            print(f"Unexpected error saving bet: {e}")
+                            self.session.rollback()
+                            continue
+    
     def get_match_without_statistics(self, league_id, limit=100):
-        league = self.session.query(League).filter(
-            League.id == league_id
-        ).first()
-        if not league:
-            print(f"Nenhuma LeagueSeason encontrada para league_id={league_id}")
-            return []
+        '''
+        uma função simplesmente para pegar os ids das partidas e adicionar as estatisticas por parte, para não estourar o limite diário de consultas
+        '''
 
         matches = self.session.query(Match).filter(
-            Match.league_id == league.id,
+            Match.league_id == league_id,
             Match.status == '1',
             Match.home_team_possession == None
         ).all()
-        match_ids = [match.id for match in matches][:limit]
+        if limit is None:
+            match_ids = [match.id for match in matches]
+        else:
+            match_ids = [match.id for match in matches][:limit]
 
         return match_ids
 
@@ -265,7 +612,7 @@ class APIDataManager:
         print(f"Found {len(matches_data)} matches")
         
         # Instanciando o CRUD de matches
-        match_crud = crud.CRUDMatch(Match)
+        match_crud = CRUDMatch(Match)
         for match in matches_data:
             try:
                 existing_match = self.session.query(Match).filter(Match.id == match['fixture']['id']).first()
@@ -274,82 +621,24 @@ class APIDataManager:
                     update_data = {
                         'status': 1 if match['fixture']['status']["long"] == "Match Finished" else 2 if match['fixture']['status']["long"] == "In Progress" else 0,
                         'home_team_goals': match['goals']['home'],
-                        'away_team_goals': match['goals']['away']
+                        'away_team_goals': match['goals']['away'],
+                        'home_team_goals_firsthalf':match['score']['halftime']['home'],
+                        'away_team_goals_firsthalf':match['score']['halftime']['away'],
+                        'data': match['fixture']['date']
                     }
                     match_crud.update(
                         db=self.session,
                         db_obj=existing_match,
                         obj_in=update_data
                     )
-                    print(f"Partida {match['fixture']['id']} atualizada com sucesso")
-                else:
-                    print(f"Partida {match['fixture']['id']} não encontrada no banco de dados")
+                    #print(f"Partida {match['fixture']['id']} atualizada com sucesso")
+                #else:
+                    #print(f"Partida {match['fixture']['id']} não encontrada no banco de dados")
                     
             except Exception as e:
                 print(f"Erro ao atualizar partida {match['fixture']['id']}: {str(e)}")
                 traceback.print_exc()
                 self.session.rollback()
-    
-    def insert_teams_season(self, season_data, league_id, season_year, is_current):
-        """
-        Insere os times de uma liga específica para uma temporada
-        
-        Args:
-            league_id (int): ID da liga (ex: 39 para Premier League)
-            season_year (str): Ano da temporada (ex: "2023-2024")
-        """
-        try:
-            #verifica se a temporada existe
-            season = self.session.query(Season).filter(
-                Season.league_id == league_id,
-                Season.year == season_year
-            ).first()
-            
-            if not season:
-                season = self.add_season(39, "2024", is_current)
-            print(season.id)
-            # 3. Processa cada time
-            for team_info in season_data:
-                team_data = team_info['team']
-                
-                # Verifica se o time já existe no banco
-                team = self.session.query(Team).filter(Team.id == team_data['id']).first()
-                
-                if not team:
-                    # Cria o time se não existir
-                    team = Team(
-                        id=team_data['id'],
-                        name=team_data['name'],
-                        short_name=team_data['code'],
-                        city=team_data.get('country', 'Unknown'),
-                        img_url=team_data['logo']
-                    )
-                    self.session.add(team)
-                    self.session.commit()
-                    print(f"Time {team_data['name']} criado com ID {team_data['id']}")
-                    
-                # 4. Associa o time à temporada
-                existing_association = self.session.query(SeasonTeam).filter(
-                    SeasonTeam.season_id == season.id,
-                    SeasonTeam.team_id == team.id
-                ).first()
-                
-                if not existing_association:
-                    new_association = SeasonTeam(
-                        season_id=season.id,
-                        team_id=team.id
-                    )
-                    self.session.add(new_association)
-                    print(f"Time {team.name} associado à temporada {season_year}")
-                
-            self.session.commit()
-            print("Associação de times à temporada concluída com sucesso!")
-        except Exception as e:
-            self.session.rollback()
-            print(f"Erro ao inserir times na temporada: {str(e)}")
-            traceback.print_exc()
-        finally:
-            self.close()
     
     def add_season(self, league_id, season_year, is_current=True):
         """
@@ -396,7 +685,70 @@ class APIDataManager:
             return None
         finally:
             self.close()
+    
+    def export_to_file(self, endpoint: str, file_prefix: str = "data", save_csv: bool = False):
+        """
+            Extrai dados da API e salva em arquivo (Parquet + opcionalmente CSV).
             
+            Uso:
+                export_to_file("fixtures", {"league": 71, "season": 2023}, "partidas")
+        """
+        try:
+            data = self.fetch_data(f"https://api-football-v1.p.rapidapi.com/v3/{endpoint}")
+            # 2. Transforma para DataFrame
+            df = pd.json_normalize(data['response'], sep='_')
+            df['extracted_at'] = datetime.now()  # Adiciona timestamp
             
+            # 3. Define caminho do arquivo
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = "data/exports"
+            os.makedirs(output_dir, exist_ok=True)
+            base_path = f"{output_dir}/{file_prefix}_{timestamp}"
+            
+            # 4. Salva Parquet (obrigatório)
+            df.to_parquet(f"{base_path}.parquet", engine='pyarrow')
+            print(f"✅ Dados salvos em {base_path}.parquet")
+            
+            # 5. Opcional: Salva CSV (para inspeção rápida)
+            if save_csv:
+                df.to_csv(f"{base_path}.csv", index=False)
+                print(f"✅ Versão CSV salva em {base_path}.csv")
+
+            return base_path
+        except Exception as e:
+            print(f"❌ Erro ao exportar {endpoint}: {str(e)}")
+        return None
+    
+    def update_halftime_goals_matches(self, matches_data):
+        '''
+            Função para UPDATE de gols no meio do jogo (implementação, usada apenas 1 vez)
+        '''
+        print(f"Found {len(matches_data)} matches")
+        
+        # Instanciando o CRUD de matches
+        match_crud = CRUDMatch(Match)
+        for match in matches_data:
+            try:
+                existing_match = self.session.query(Match).filter(Match.id == match['fixture']['id']).first()
+                if existing_match:
+                    print(f"Atualizando partida {match['fixture']['id']}")
+                    update_data = {
+                        'home_team_goals_firsthalf':match['score']['halftime']['home'],
+                        'away_team_goals_firsthalf':match['score']['halftime']['away'],
+                    }
+                    match_crud.update(
+                        db=self.session,
+                        db_obj=existing_match,
+                        obj_in=update_data
+                    )
+                    print(f"Partida {match['fixture']['id']} atualizada com sucesso")
+                else:
+                    print(f"Partida {match['fixture']['id']} não encontrada no banco de dados")
+                    
+            except Exception as e:
+                print(f"Erro ao atualizar partida {match['fixture']['id']}: {str(e)}")
+                traceback.print_exc()
+                self.session.rollback()
+           
     def close(self):
         self.session.close()
