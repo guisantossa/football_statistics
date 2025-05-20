@@ -18,7 +18,12 @@ def load_and_predict(predictor_class, model_path, league_id, model_type, match_i
     try:
         # Carrega o modelo específico
         predictor = predictor_class()
-       
+
+        existing_predict = predictor.check_match_db(match_id, model_type)
+        
+        if(existing_predict):
+            print('Previsão já Existente')
+            return None
         
         # Faz a previsão
         result = predictor.predict_probability_load(
@@ -77,6 +82,8 @@ def update_prediction(predictor, match_id, league_id, home_id, away_id, last_n_g
     # Encontra todos os modelos treinados
     relevant_models = get_relevant_models(league_id)
     
+    
+    
     if not relevant_models:
         print(f"Nenhum modelo encontrado para a liga {league_id}")
         return []
@@ -101,7 +108,8 @@ def update_prediction(predictor, match_id, league_id, home_id, away_id, last_n_g
             )
         
         for future in concurrent.futures.as_completed(futures):
-            predictions.append(future.result())
+            if future.result() is not None:
+                predictions.append(future.result())
     
     # Filtra previsões bem-sucedidas
     successful_predictions = [p for p in predictions if p['status'] == 'SUCCESS']
@@ -144,6 +152,7 @@ def main():
     main_predictor = MatchProbabilityPredictor()
     #'''
     processor.update_date_matches(today)
+    
     stats_processor = FootballStatsProcessor()
     
     
@@ -152,11 +161,12 @@ def main():
 
     for league in leagues:
         print(f"Atualizando Partidas da Liga {league}")
+        processor.insert_matches([league],[date.today().year],date.today())
         processor.update_all_pends_matches(league)
         stats_processor.update_next_round(league)
         
     
-    #
+    #'''
     
     matches = main_predictor.get_matches_per_date(today)
 

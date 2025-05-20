@@ -96,6 +96,8 @@ class DataProcessor:
                     print('Partida sem dados para atualizar')
         else:
             print(f"Não há jogos Passados a serem atualizados")
+            
+        
         
     def update_date_matches(self, data):
         '''Atualiza as datas das partidas existentes no banco'''
@@ -124,15 +126,16 @@ class DataProcessor:
         else:
             print(f"Não Jogos a serem atualizados no dia {date} da temporada {year}")
 
-    def insert_matches(self,leagues, years):
+    def insert_matches(self,leagues, years, date= None):
         '''
         Inserção dos partidas na liga da temporada
         '''
         for league in leagues:
             for year in years:
-                matches_data = self.api_data_manager.fetch_data(
-                    API_URL+f"fixtures?league={league}&season={year}"
-                )
+                api_url = API_URL+f"fixtures?league={league}&season={year}"
+                if date:
+                    api_url += f"&date={date}"
+                matches_data = self.api_data_manager.fetch_data(api_url)
                 if not matches_data or 'response' not in matches_data:
                     print(f"Nenhum dado de partida retornado pela API para a liga {league} e temporada {year}")
                     return
@@ -252,7 +255,7 @@ class DataProcessor:
         
         
         print("Inserindo países...")
-        #self.insert_countries()
+        self.insert_countries()
 
         print("Inserindo ligas...")
         leagues = self.insert_leagues()

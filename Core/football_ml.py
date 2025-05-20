@@ -172,7 +172,7 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
                     F.avg("shot_eff_diff").alias("shot_eff_diff"),
                     F.avg("weighted_goal_dominance").alias("weighted_goal_dominance"),
                 ],
-                'label': 'home_goals_total',
+                'label': 'home_team_goals',
                 'label_expr': F.col("home_team_goals"),
                 'value_init': 0.5,
                 'predictions_number': 3
@@ -199,7 +199,7 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
                     F.avg("shot_eff_diff").alias("shot_eff_diff"),
                     F.avg("weighted_goal_dominance").alias("weighted_goal_dominance"),
                 ],
-                'label': 'away_goals_total',
+                'label': 'away_team_goals',
                 'label_expr': F.col("away_team_goals"),
                 'value_init': 0.5,
                 'predictions_number': 3
@@ -595,6 +595,7 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
         Prever a probabilidade de alguma feature usando o modelo RandomForest treinado
         """
         self.spark.sparkContext.setLogLevel("ERROR")
+        
         parts = model_path.split('_')
         op = '>' if parts[3] == 'gt' else '<'
         
@@ -773,6 +774,7 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
         else:
             for i, prob in enumerate(prob_list):
                 cumul = prob + last
+                #print(f'Classe {class_names.get(i+1, f"Classe {i+1}")} valor {prob}')
                 results.append({
                     "classe": class_names.get(i+1, f"Classe {i+1}"),
                     "prob": cumul
@@ -787,7 +789,7 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
         elif model_type == 'awaygoals':
             home_team_id = None
               
-        results =  self.get_confiability(results, league_id, model_type, home_team_id, away_team_id, 10)
+        results =  self.get_confiability(results, league_id, model_type, home_team_id, away_team_id, last_n_games)
 
         return results 
     
@@ -899,6 +901,48 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
         self.pipeline_model = PipelineModel.load(model_path)
         #print(f"Modelo carregado de {model_path}")
 
+    def get_predictions_matches(self, match_id):
+        '''Consulta as previsões do jogo'''
+        
+        query = (f'''
+            (with teams_match as(
+                select m.id, h.id home_id, a.id away_id, h.name home, a.name away, m.home_team_goals, m.away_team_goals, l.name league, home_team_rank, away_team_rank from matches m
+                    join teams h on (h.id = m.home_team_id)
+                    join teams a on (a.id = m.away_team_id)
+                    join leagues l on (m.league_id = l.id)
+                where m.id = {match_id}
+            ),
+            pred_bet as (
+                select match_id, bt.name bet_type, valor, probabilidade, confianca from predictions p 
+                    join bet_types bt on (bt.id = p.bet_type_id)
+                where match_id = {match_id} and probabilidade > 0.7 and confianca > 0.5
+            )
+            select match_id, home_id, away_id, home, away, 
+            home_team_rank, away_team_rank, bet_type, confianca, 
+            valor, probabilidade, league from teams_match tm
+                join pred_bet pb on (pb.match_id = tm.id)
+            order by confianca desc, probabilidade desc
+        ) as query ''')
+        
+        
+        df = self.read_from_db(query)
+        
+        if df.count() == 0:
+            return {}
+
+        return [row.asDict() for row in df.collect()]
+    
+    def check_match_db(self, match_id, model_type):
+        
+        model_type = self.convert_model_type(model_type)
+
+        try:
+            first = self.read_from_db('predictions').filter((F.col('match_id') == match_id) & (F.col('bet_type_id') == model_type))
+        except Exception as e:
+            print(e)
+
+        return 1 if first.count() > 0 else None
+    
     def save_predictions_to_db(self, predictions, match_id, prediction_date):
         """
         Salva previsões no banco de dados
@@ -970,9 +1014,16 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
         
         return bet_types[model_type] if model_type in bet_types else None
 
-    def get_confiability(self, results, league_id, model_type, home_id,away_id, last_n_games = 10):
+    def get_avg(self, league_id: int, model_type:str, home_id:int = None, away_id:int = None):
+        #Retorna o AVG do label_col da liga selecionada
+        label_col = self.feature_config[model_type]['label']
+        df = self.read_from_db('current_season_matches').filter((F.col('league_id') == league_id)).agg(F.avg(label_col).alias('avg'))
+        return self.read_from_db('current_season_matches').filter((F.col('league_id') == league_id)).agg(F.avg(label_col).alias('avg')).collect()[0]['avg']
+    
+    def get_confiability(self, results, league_id, model_type, home_id,away_id, last_n_games = 5):
         '''
         Recebe uma lista de resultados (predições) e retorna confiabilidade baseada no histórico dos times.
+        Recebe uma lista de resultados (predições) e retorna confiabilidade baseada em históricos, somados uns aos outros e com pesos.
         Cada item da lista deve conter:
         - 'classe': string como "goals > 2.5"
         - 'probabilidade_modelo': previsão do modelo (float entre 0 e 1)
@@ -998,22 +1049,14 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
         else:
             all_matches = away  # Só away
         
-        '''A implementar futuramente
-        # Ordena por data decrescente e cria índice de recência
-        window = Window.orderBy(F.desc("data"))
-        all_matches = all_matches.withColumn("rn", F.row_number().over(window))
-        all_matches = all_matches.filter(F.col("rn") <= last_n_games * 2)
         
-        # Ponderação temporal: peso maior para jogos mais recentes
-        weights = [np.exp(-i) for i in range(last_n_games * 2)]
-        total_weight = sum(weights)
-        weight_map = {i + 1: w / total_weight for i, w in enumerate(weights)}
-        weight_expr = F.create_map([F.lit(x) for pair in weight_map.items() for x in pair])
-        all_matches = all_matches.withColumn("peso_temporal", weight_expr.getItem(F.col("rn")))
-        '''
+        
         total_matches = last_n_games * (1 if home is None or away is None else 2)
-        
+        avg = self.get_avg(league_id, model_type)
         for result in results:
+            
+            #Em caso de predileções de > ou < pega a média geral do campeonato e bonifica com 3%
+            
             classe = result['classe']  # Ex: "goals > 2.5"
             # Extrair operação e valor
             parts = classe.split(' ')
@@ -1022,6 +1065,10 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
 
             # Construir a comparação
             comparison = F.col(label_col) > F.lit(valor) if op == '>' else F.col(label_col) < F.lit(valor)
+            if op == '>':
+                confianca = 0.03 if avg >= valor else - 0.03
+            else:
+                confianca = 0.03 if avg <= valor else - 0.03
 
             # Filtra os jogos que batem essa condição
             filtered = all_matches.filter(comparison)
@@ -1031,7 +1078,8 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
             empirical_prob = count / total_matches if total_matches > 0 else 0
 
             # Adiciona ao resultado a confiabilidade histórica
-            result['confiabilidade'] = round(empirical_prob, 3)
+            #result['confiabilidade'] = round(empirical_prob, 3)
+            result['confiabilidade'] = (((result['prob']*2) + round(empirical_prob, 3))/3) + confianca
 
 
         return results
@@ -1206,11 +1254,12 @@ class MatchProbabilityPredictor(TeamStatsCalculator):
         from database.db import get_db, BetCombination, CombinationBet, Match
         session = get_db()
         
-        bets = self.read_from_db('combination_bets').filter((F.col('result').isNull()) & (F.col('bet_status') == 'pending')
-                                                           )
+        bets = self.read_from_db('combination_bets').filter((F.col('result').isNull()) & (F.col('bet_status') == 'pending' )
+                                                                                          )
+                                                           
         if bets.count() == 0:
             return None
-        
+        #bets.show()
         # 2. Obter apenas os match_ids necessários
         match_ids_list = [row['match_id'] for row in bets.select('match_id').distinct().collect()]
         matches = self.read_from_db('matches_ml').filter(F.col('id').isin(match_ids_list) & (F.col('status') == '1'))
@@ -1434,11 +1483,11 @@ if __name__ == "__main__":
     
     #predictor.compare_predicted_bets_combination()
     #exit()
-    combinations = predictor.generate_combinations_bets(data='2025-05-14', min_odds= 1.55, max_odds=1.80, num_bets=3, top_n = 100, odd_min=1.10, max_repeats_per_bet=2 )
-    print(f"Número total de combinações {len(combinations)}")
+    #combinations = predictor.generate_combinations_bets(data='2025-05-14', min_odds= 1.55, max_odds=1.80, num_bets=3, top_n = 100, odd_min=1.10, max_repeats_per_bet=2 )
+    #print(f"Número total de combinações {len(combinations)}")
     #predictor.save_combinations_to_db(combinations,min_odds=1.55,max_odds=1.80)
     
-    for combo in combinations[:20]:
+    '''for combo in combinations[:20]:
         print(f"\nCombinação #{combo['combination_id']}")
         print(f"Odds Total: {combo['total_odds']:.2f}")
         print(f"Probabilidade Média: {combo['avg_probability']:.2%} ---------  Confiabilidade Média: {combo['avg_confidence']:.2%}")
@@ -1446,27 +1495,30 @@ if __name__ == "__main__":
         for bet in combo['bets']:
             print(f"- {bet['match']}: {bet['bet']} (Odd: {bet['odd']:.2f}, Prob: {bet['prob']:.2%})")
     exit()
-    home_team_id = 56  # ID do time da casa
-    away_team_id = 62 # ID do time visitante
-    league_id = 40
-    model = 'goals'
-    op = 'lt'
+    '''
+    home_team_id = 451  # ID do time da casa
+    away_team_id = 453 # ID do time visitante
+    league_id = 128
+    model = 'goalsfirsthalf'
+    op = 'gt' #<
+    #op = 'gt' #>
     model_path = f'models/randomForestClassifier/rf_{model}_{league_id}_{op}'
     
     
-    
+    #op = '>' #<
+    #op = '>' #>
     #predictor.load_model(model_path)
     #predictor.get_feature_importance(model)
     #exit()
     # Agora você pode usar match_example para previsões
     #print("treino do modelo")
-    predictor.train_classifier_model(league_id, model, '>', last_n_games=380)
+    #predictor.train_classifier_model(league_id, model, op, last_n_games=380)
     #
-    predictor.save_model(model, model_path, '<')
+    #predictor.save_model(model, model_path, op)
     
     print("previsão do modelo")
     #result = predictor.predict_probability_load(model_path, league_id, 'goals', home_team_id, away_team_id, last_n_games=5)
-    results = predictor.predict_probability(league_id, model, '>', home_team_id, away_team_id, last_n_games=5)
+    results = predictor.predict_probability_load(league_id=league_id, model_path=model_path, model_type=model, home_team_id=home_team_id, away_team_id=away_team_id, last_n_games=5)
     for result in results:
         print(f"Classe: {result['classe']}, Probabilidade: {result['prob']}, Confiabilidade: {result['confiabilidade']}, Confianca Ajustada: {result.get('confianca_ajustada', 'N/A')}")
         

@@ -142,11 +142,13 @@ class SparkManager:
     def get_matches_per_date_complete(self, data):
         '''Retorna todos os jogos do dia'''
         
+        filter = f"date(m.data) = '{data}'" if data != datetime.today() else f"m.data BETWEEN (NOW() - INTERVAL '90 minutes') AND (NOW() + INTERVAL '90 minutes')"
+        
         query = f"""
                ( SELECT 
                 m.id AS match_id,
                 m.league_id league_id,
-                m.data - INTERVAL '4 HOURS' AS match_date,
+                m.data - INTERVAL '3 HOURS' AS match_date,
                 m.matchday,
                 m.home_team_id,
                 m.away_team_id,
@@ -162,7 +164,8 @@ class SparkManager:
             JOIN teams at ON m.away_team_id = at.id
             JOIN leagues l ON m.league_id = l.id
             JOIN seasons s ON m.league_id = s.league_id
-            WHERE date(m.data) = '{data}' and s."current" is true
+            WHERE date(m.data) = '{data}'
+            and s."current" is true
             ORDER BY 
                 data ASC  ) as today_matches
         """
@@ -329,36 +332,7 @@ class SparkManager:
         """Encerra a sessão do Spark"""
         self.spark.stop()
     
-    def get_predictions_matches(self, match_id):
-        '''Consulta as previsões do jogo'''
-        
-        query = (f'''
-            (with teams_match as(
-                select m.id, h.id home_id, a.id away_id, h.name home, a.name away, m.home_team_goals, m.away_team_goals, l.name league, home_team_rank, away_team_rank from matches m
-                    join teams h on (h.id = m.home_team_id)
-                    join teams a on (a.id = m.away_team_id)
-                    join leagues l on (m.league_id = l.id)
-                where m.id = {match_id}
-            ),
-            pred_bet as (
-                select match_id, bt.name bet_type, valor, probabilidade, confianca from predictions p 
-                    join bet_types bt on (bt.id = p.bet_type_id)
-                where match_id = {match_id} and probabilidade > 0.7 and confianca > 0.5
-            )
-            select match_id, home_id, away_id, home, away, 
-            home_team_rank, away_team_rank, bet_type, confianca, 
-            valor, probabilidade, league from teams_match tm
-                join pred_bet pb on (pb.match_id = tm.id)
-            order by confianca desc, probabilidade desc
-        ) as query ''')
-        
-        
-        df = self.read_from_db(query)
-        
-        if df.count() == 0:
-            return {}
-
-        return [row.asDict() for row in df.collect()]
+    
     
     def load_stat_mapping(self, file_path="Core/stat_mapping.yml"):
         import yaml
@@ -683,9 +657,6 @@ class SparkManager:
             "melhor_aposta": direcao_final["direcao_real"] if direcao_final else "indefinido"
         }
 
-    
-    
-    
     #### LETRA MORTA ### Mas util para consultas e entendimentos
     def get_fouls_features(self, team_id: int, window_size: int = 5):
         """Calcula features de faltas para um time específico"""

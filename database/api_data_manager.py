@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))  # Volta até app
 from database.db import get_db, League, Team, Match, Player, Season, Country, Season, Bookmaker, BetType, Bet
-from sqlalchemy import or_, and_
+from sqlalchemy import func
 from database.crud import CRUDBase, CRUDMatch
 from datetime import datetime
 from dotenv import load_dotenv
@@ -93,11 +93,12 @@ class APIDataManager:
                 continue
 
             print(f"Attempting to save competition with ID: {competition['league']['name']}")
-            first = self.session.query(League).filter(League.id == competition['league']['id']).first()
+            
             if(competition['seasons'][0]['coverage']['fixtures']["statistics_fixtures"] == False):
-                print('Competição não habilitada')
+                print(f"Competição ID: {competition['league']['id']} não habilitada")
                 continue
             else:
+                first = self.session.query(League).filter(League.id == competition['league']['id']).first()
                 if not first:
                     print(f"Competição {competition['league']['name']} não encontrada, criando...")
                     if competition['country']['code'] == None:
@@ -366,9 +367,9 @@ class APIDataManager:
                 print(f"Nenhuma League encontrada para league_id={league_id}")
                 return []
             matches = self.session.query(Match).filter(
-                    (Match.status == '0'), Match.data < datetime.now(), Match.league_id == league_id)
+                    (Match.status == '0'), func.date(Match.data) <= datetime.now().date(), Match.league_id == league_id)
         else:
-            matches = self.session.query(Match).filter(Match.status == '0', Match.data < datetime.now())
+            matches = self.session.query(Match).filter(Match.status == '0', func.date(Match.data) <= datetime.now().date())
         
         # Extrai os IDs e converte para string
         ids = [str(match.id) for match in matches]

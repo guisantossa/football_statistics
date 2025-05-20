@@ -5,10 +5,14 @@ import time
 def main():
     
    
-    season = [2024,2025]
+    season = [2025]
     countries = ['Brazil','Argentina','Spain','Italy','Germany','France','Portugal','England', 'Netherlands']
     countries = ['Turkey', 'Saudi-Arabia', 'USA', 'Russia']
     countries = ['Argentina','Mexico', 'Chile']
+    countries = ['Sweden', 'Bulgaria', 'Denmark', 'Poland']
+    countries = ['Scotland']
+    countries = ['China', 'Norway', 'Switzerland', 'Serbia', 'Israel']
+    #countries = ['Ukraine']
                  #'Belgium','Turkey','Russia','Ukraine','Scotland','Greece','Switzerland','Denmark','Norway','Sweden','Saudi Arabia', 'Mexico', 'USA',
                  #'Switzerland','Austria','Czech Republic','Poland','Romania','Hungary','Serbia','Croatia','Bulgaria']
     

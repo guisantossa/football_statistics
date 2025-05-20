@@ -147,4 +147,78 @@ class FootballDashboardML():
         except Exception as e:
             st.error(f"❌ Erro ao gerar apostas: {e}")
 
+    def render_predictions(self, match_id: int):
+        '''Renderiza as previsões'''
+        st.markdown("## 📊 Previsões das Partidas")
         
+        
+            
+        predictions = self.spark_ml.get_predictions_matches(match_id)
+        available_bet_types = sorted(list(set(p["bet_type"].capitalize() for p in predictions)))
+        
+        selected_bet_types = st.multiselect(
+            "Filtrar por tipo de aposta:",
+            available_bet_types,
+            default=available_bet_types,
+            key=f"bet_filter_{match_id}"  # chave única por partida
+        )
+        confidence_range = st.slider(
+            "Filtrar por nível de confiabilidade (%):",
+            min_value=50,
+            max_value=100,
+            step=10,
+            value=(50, 100),  # valor inicial (range inteiro)
+            key=f"confidence_filter_{match_id}"
+        )
+        filtered_predictions = [
+            p for p in predictions
+            if p["bet_type"].capitalize() in selected_bet_types
+            and (confidence_range[0] <= p["confianca"] * 100 <= confidence_range[1])
+        ]
+        for predict in predictions:
+            if (
+                predict["bet_type"].capitalize() in selected_bet_types
+                and (confidence_range[0] <= predict["confianca"] * 100 <= confidence_range[1])
+            ):
+                match_data = {
+                    "id": predict["match_id"],
+                    "home_id": predict["home_id"],
+                    "away_id": predict["away_id"],
+                    "home_team": predict["home"],
+                    "away_team": predict["away"],
+                    "home_rank": predict["home_team_rank"],
+                    "away_rank": predict["away_team_rank"],
+                    "bet_type": predict["bet_type"],
+                    "valor": predict["valor"],
+                    "probabilidade": predict["probabilidade"],
+                    "confianca": predict["confianca"]*100,
+                    "league": predict["league"]
+                }
+            
+                with st.container():
+                    # Exemplo simples de HTML no Streamlit
+                    
+                    st.markdown(f"""
+                        <div style="white-space: nowrap; overflow-x: auto; padding: 4px 0; display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+                            <!-- Elementos em uma única linha com espaço adequado -->
+                            <span style="display: inline-block; width: 10%; font-size: 12px; background-color: #f0f4f8; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                🏆 <strong>{match_data["league"]}</strong>
+                            </span>
+                            <span style="display: inline-block; width: 30%; font-size: 12px; background-color: #f0f4f8; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                ⚔️ <strong>{match_data["home_team"]}</strong> <span style="color: #666;">(#{match_data["home_rank"]})</span> vs <strong>{match_data["away_team"]}</strong> <span style="color: #666;">(#({match_data["away_rank"]}))</span>
+                            </span>
+                            <span style="display: inline-block; width: 25%; font-size: 12px; background-color: #e6f0fa; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                💡 <strong>{match_data["bet_type"].capitalize()}</strong>
+                            </span>
+                            <span style="display: inline-block; width: 15%; font-size: 12px; background-color: #e8f8f5; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                🎯 <strong>{match_data["valor"]}</strong>
+                            </span>
+                            <span style="display: inline-block; width: 10%; font-size: 12px; background-color: #fef9e7; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                📊 <strong>{match_data["probabilidade"]*100:.1f}%</strong>
+                            </span>
+                            <span style="display: inline-block; width: 10%; font-size: 12px; background-color: {'#eafaf1' if match_data['confianca'] >= 70 else '#fff8e1' if match_data['confianca'] >= 50 else '#fdedec'}; padding: 4px 8px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                🔒 <strong style="color: {'#27ae60' if match_data['confianca'] >= 70 else '#f39c12' if match_data['confianca'] >= 50 else '#e74c3c'}">{match_data['confianca']:1f}%</strong>
+                            </span>
+                        </div>
+
+                        """, unsafe_allow_html=True) 
